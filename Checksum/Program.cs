@@ -2,20 +2,37 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.IO;
-using System.Collections;
 using System.Reflection;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Web.Script.Serialization;
+using Microsoft.WindowsAPICodePack.Dialogs;
 
 namespace Checksum
 {
     internal class Program
     {
+        static List<string> mainExtensions = new List<string>() { ".bin", ".c1", ".hex", ".img", "" };
+        static List<string> docExtensions = new List<string>() { ".pdf", ".docx", ".txt", ".doc" };
+
+        [STAThread]
         static void Main()
         {
+            if (!File.Exists("config.ini"))
+            {
+                var iniFile = new IniFile("config.ini");
+
+                iniFile.Write("MainExtensions", "bin c1 hex img");
+                iniFile.Write("DocExtensions", "pdf docx txt doc");
+            }
+            else
+            {
+                var iniFile = new IniFile("config.ini");
+
+                mainExtensions = ("." + iniFile.Read("MainExtensions").Trim().Replace(" ", " .")).Split(' ').ToList();
+                mainExtensions.Append("");
+                docExtensions = ("." + iniFile.Read("DocExtensions").Trim().Replace(" ", " .")).Split(' ').ToList();
+            }
+
             List<Archive> info = new List<Archive>();
 
             string dir;
@@ -24,8 +41,22 @@ namespace Checksum
 
             while (true)
             {
-                Console.Write("\nВведите путь до директории с архивами: ");
-                dir = Console.ReadLine();
+                Console.Write("\nНажмите любую клавишу для открытия окна выбора директории с архивами...");
+                Console.ReadKey(true);
+
+                var openFolder = new CommonOpenFileDialog();
+                openFolder.AllowNonFileSystemItems = true;
+                openFolder.IsFolderPicker = true;
+                openFolder.Title = "Выберите папку с архивами";
+
+                if (openFolder.ShowDialog() == CommonFileDialogResult.Ok)
+                {
+                    dir = openFolder.FileName;
+                }
+                else
+                {
+                    continue;
+                }
 
                 foreach (var archive in Directory.GetFiles(dir))
                 {
@@ -104,12 +135,10 @@ namespace Checksum
             output = output.Substring(0, output.Length - 2);
             p.WaitForExit();
 
-            //Console.WriteLine(output + "#END");
             Archive a = new Archive(Path.GetFileName(archive));
 
             foreach (var file in output.Split(new string[] { "\n\r" }, StringSplitOptions.None))
             {
-                //Console.WriteLine(file);
                 var fileInfo = file.StartsWith("\n") ? file.Substring(1).Split('\n') : file.Split('\n');
 
                 var path = fileInfo[0].Replace("Path = ", "").Replace("\r", "");
@@ -122,11 +151,11 @@ namespace Checksum
                 if (size == "0" || checksum == "00000000")
                     continue;
 
-                if (new string[] { ".bin", ".c1", ".hex", "" }.Contains(Path.GetExtension(path).ToLower()))
+                if (mainExtensions.Contains(Path.GetExtension(path).ToLower()))
                 {
                     a.bins.Add(new BinFile(path, checksum, size, packed, date));
                 }
-                else if (new string[] { ".pdf", ".docx", ".txt", ".doc", ".doc" }.Contains(Path.GetExtension(path).ToLower()))
+                else if (docExtensions.Contains(Path.GetExtension(path).ToLower()))
                 {
                     a.txts.Add(path);
                 }
